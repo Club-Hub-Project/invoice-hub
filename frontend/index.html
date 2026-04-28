@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invoice Hub — TKD Bern</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <img src="/logo.png" alt="TKD" class="sidebar-logo" onerror="this.style.display='none'">
+      <div>
+        <div class="sidebar-title">Invoice Hub</div>
+        <div class="sidebar-sub">TKD Bern</div>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button class="nav-item active" data-view="dashboard">
+        <span class="nav-icon">📊</span>
+        <span>Dashboard</span>
+      </button>
+      <button class="nav-item" data-view="events">
+        <span class="nav-icon">📅</span>
+        <span>Events</span>
+      </button>
+      <button class="nav-item" data-view="upload">
+        <span class="nav-icon">📤</span>
+        <span>CSV hochladen</span>
+      </button>
+      <button class="nav-item" data-view="invoices">
+        <span class="nav-icon">🧾</span>
+        <span>Rechnungen</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <button class="nav-item" data-view="settings">
+        <span class="nav-icon">⚙️</span>
+        <span>Einstellungen</span>
+      </button>
+      <div class="user-info" id="user-info">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <div class="user-details">
+          <div class="user-name" id="user-name">—</div>
+          <div class="user-role" id="user-role">—</div>
+        </div>
+        <button class="logout-btn" id="logout-btn" title="Abmelden">↩</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <main class="main" id="main">
+    <div id="view-dashboard" class="view active">
+      <div class="page-header">
+        <h1>Dashboard</h1>
+      </div>
+      <div id="dashboard-content">
+        <div class="loading">Wird geladen...</div>
+      </div>
+    </div>
+
+    <div id="view-events" class="view">
+      <div class="page-header">
+        <h1>Events</h1>
+        <button class="btn btn-primary" id="btn-new-event">+ Neuer Event</button>
+      </div>
+      <div id="events-content">
+        <div class="loading">Wird geladen...</div>
+      </div>
+    </div>
+
+    <div id="view-upload" class="view">
+      <div class="page-header">
+        <h1>CSV hochladen</h1>
+      </div>
+      <div id="upload-content"></div>
+    </div>
+
+    <div id="view-invoices" class="view">
+      <div class="page-header">
+        <h1>Rechnungen</h1>
+      </div>
+      <div id="invoices-content">
+        <div class="loading">Wird geladen...</div>
+      </div>
+    </div>
+
+    <div id="view-settings" class="view">
+      <div class="page-header">
+        <h1>Einstellungen</h1>
+      </div>
+      <div id="settings-content">
+        <div class="loading">Wird geladen...</div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Event Modal -->
+  <div class="modal-backdrop" id="modal-event" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="modal-event-title">Neuer Event</h2>
+        <button class="modal-close" id="modal-event-close">×</button>
+      </div>
+      <div class="modal-body">
+        <form id="form-event">
+          <div class="form-group">
+            <label class="form-label">Name *</label>
+            <input class="form-input" type="text" id="ev-name" required placeholder="Sommer-Camp 2026">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Datum</label>
+              <input class="form-input" type="date" id="ev-date">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Betrag (CHF)</label>
+              <input class="form-input" type="number" id="ev-fee" min="0" step="0.05" placeholder="0.00">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Beschreibung</label>
+            <textarea class="form-input" id="ev-description" rows="2" placeholder="Optionale Beschreibung"></textarea>
+          </div>
+          <details class="form-details">
+            <summary>Webling-Buchung (optional)</summary>
+            <div class="form-details-body">
+              <div class="form-group">
+                <label class="form-label">Buchungsperiode</label>
+                <select class="form-input" id="ev-period">
+                  <option value="">– aus Einstellungen –</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Soll-Konto</label>
+                  <select class="form-input" id="ev-debit">
+                    <option value="">– aus Einstellungen –</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Haben-Konto</label>
+                  <select class="form-input" id="ev-credit">
+                    <option value="">– aus Einstellungen –</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Debitorenkategorie</label>
+                <select class="form-input" id="ev-debitorcat">
+                  <option value="">– keine –</option>
+                </select>
+              </div>
+            </div>
+          </details>
+          <div class="modal-actions">
+            <button type="button" class="btn" id="modal-event-cancel">Abbrechen</button>
+            <button type="submit" class="btn btn-primary">Speichern</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Email preview modal -->
+  <div class="modal-backdrop" id="modal-email" style="display:none">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2>E-Mail-Vorlage</h2>
+        <button class="modal-close" id="modal-email-close">×</button>
+      </div>
+      <div class="modal-body">
+        <pre id="email-preview" class="email-preview"></pre>
+        <div class="modal-actions">
+          <button class="btn" id="btn-copy-email">📋 Kopieren</button>
+          <button class="btn" id="modal-email-close2">Schliessen</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast-container"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

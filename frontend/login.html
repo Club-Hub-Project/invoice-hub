@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — Invoice Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: #f5f6fa;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #1a1d2b;
+    }
+    .login-container { width: 100%; max-width: 420px; padding: 1rem; }
+    .login-card {
+      background: white;
+      border-radius: 20px;
+      padding: 2.75rem 2.25rem;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+      border: 1px solid #dfe1e8;
+    }
+    .login-brand { text-align: center; margin-bottom: 2.25rem; }
+    .login-brand img { width: 100px; height: auto; margin-bottom: 1rem; }
+    .login-brand-icon { font-size: 3rem; margin-bottom: 0.75rem; }
+    .login-brand h1 {
+      font-size: 1.5rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      background: linear-gradient(135deg, #16a34a 0%, #0d9488 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .login-brand p { font-size: 0.78rem; color: #8e92a3; margin-top: 0.3rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; }
+    .form-group { margin-bottom: 1rem; }
+    .form-label { display: block; font-size: 0.78rem; font-weight: 600; color: #5a5f72; margin-bottom: 0.45rem; }
+    .form-input {
+      width: 100%;
+      padding: 0.7rem 0.9rem;
+      border: 1.5px solid #dfe1e8;
+      border-radius: 10px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      color: #1a1d2b;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      background: #fafbfd;
+    }
+    .form-input::placeholder { color: #b5b9c6; }
+    .form-input:focus { outline: none; border-color: #16a34a; box-shadow: 0 0 0 3px rgba(22,163,74,0.12); background: white; }
+    .form-input.code-input {
+      text-align: center;
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: 0.5em;
+      padding: 0.85rem;
+      font-variant-numeric: tabular-nums;
+    }
+    .login-btn {
+      width: 100%;
+      padding: 0.75rem;
+      background: #16a34a;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-top: 0.65rem;
+    }
+    .login-btn:hover { background: #15803d; box-shadow: 0 4px 16px rgba(22,163,74,0.25); transform: translateY(-1px); }
+    .login-btn:active { transform: scale(0.98) translateY(0); }
+    .login-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+    .back-link { display: block; text-align: center; margin-top: 1.1rem; color: #8e92a3; font-size: 0.82rem; cursor: pointer; text-decoration: none; transition: color 0.2s; }
+    .back-link:hover { color: #16a34a; }
+    .error-msg { background: #fef2f2; color: #dc2626; font-size: 0.82rem; padding: 0.55rem 0.85rem; border-radius: 10px; margin-bottom: 1rem; display: none; border: 1px solid #fecaca; }
+    .error-msg.show { display: block; }
+    .success-msg { background: #f0fdf4; color: #16a34a; font-size: 0.82rem; padding: 0.55rem 0.85rem; border-radius: 10px; margin-bottom: 1rem; display: none; border: 1px solid #bbf7d0; }
+    .success-msg.show { display: block; }
+    .step-hint { font-size: 0.76rem; color: #8e92a3; text-align: center; margin-top: 0.85rem; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-card">
+      <div class="login-brand">
+        <img src="/logo.png" alt="TKD Bern" onerror="this.outerHTML='<div class=login-brand-icon>🧾</div>'">
+        <h1>Invoice Hub</h1>
+        <p>TKD Bern</p>
+      </div>
+
+      <div class="error-msg" id="error"></div>
+      <div class="success-msg" id="success"></div>
+
+      <form id="step-email">
+        <div class="form-group">
+          <label class="form-label" for="email">E-Mail-Adresse</label>
+          <input class="form-input" type="email" id="email" name="email" autocomplete="email" required autofocus placeholder="deine@email.ch">
+        </div>
+        <button class="login-btn" type="submit">Code senden</button>
+        <div class="step-hint">Du erhältst einen 6-stelligen Login-Code per E-Mail.</div>
+      </form>
+
+      <form id="step-code" style="display:none">
+        <div class="form-group">
+          <label class="form-label" for="code">Login-Code</label>
+          <input class="form-input code-input" type="text" id="code" name="code" maxlength="6" pattern="[0-9]{6}" inputmode="numeric" autocomplete="one-time-code" required placeholder="------">
+        </div>
+        <button class="login-btn" type="submit">Anmelden</button>
+        <a class="back-link" id="back-to-email">Andere E-Mail verwenden</a>
+      </form>
+    </div>
+  </div>
+  <script src="login.js"></script>
+</body>
+</html>

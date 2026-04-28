@@ -1,0 +1,28 @@
+name = "invoice-hub"
+main = "src/index.js"
+compatibility_date = "2024-12-01"
+account_id = "41848e092c2101f9a15c8ee988133cc8"
+workers_dev = true
+
+[assets]
+directory = "../frontend"
+
+[vars]
+WEBLING_BASE_URL = "https://tkdbern.webling.ch/api/1"
+JWT_SECRET = "club-hub-shared-jwt-secret-2026"
+ORG_ID = "tkdbern"
+WEBLING_MEMBER_GROUP_ID = "456"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "bbf4dfbe43ad46d1828c5879097c7599"
+preview_id = "00000000000000000000000000000004"
+
+# Service bindings
+[[services]]
+binding = "AUTH_SERVICE"
+service = "auth-service"
+
+[[services]]
+binding = "USER_CONNECTOR"
+service = "webling-connector"
