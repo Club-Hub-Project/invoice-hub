@@ -149,6 +149,26 @@ export async function handleUpload(path, method, request, env) {
 
       const selectedMember = matches.length === 1 ? matches[0] : null;
 
+      // If unmatched, try each word of the name individually to build suggestions
+      let suggestions = [];
+      if (matchStatus === 'unmatched' && name) {
+        const seen = new Set();
+        const parts = name.trim().split(/\s+/).filter(p => p.length >= 2);
+        for (const part of parts) {
+          try {
+            const partial = await searchMembers(env, part);
+            for (const m of partial) {
+              if (!seen.has(m.id)) {
+                seen.add(m.id);
+                suggestions.push(m);
+              }
+            }
+          } catch { /* ignore */ }
+          if (suggestions.length >= 5) break;
+        }
+        suggestions = suggestions.slice(0, 5);
+      }
+
       return {
         raw: row,
         name: name || email,
@@ -157,6 +177,7 @@ export async function handleUpload(path, method, request, env) {
         itemTitle,
         matchStatus,
         matches: matches.slice(0, 5), // cap at 5 candidates
+        suggestions,
         memberId: selectedMember?.id || null,
         memberName: selectedMember?.displayName || null,
         memberEmail: selectedMember?.email || null,

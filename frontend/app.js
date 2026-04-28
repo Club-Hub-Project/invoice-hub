@@ -499,6 +499,9 @@ async function renderUploadStep(step) {
     const matched = uploadRows.filter(r => r.matchStatus === 'matched');
     const hasAmountCol = uploadStats.hasAmountColumn;
     const hasArticleCol = uploadStats.hasArticleColumn;
+    // Show invoice form whenever there are any resolvable rows (matched, multiple, or unmatched with suggestions)
+    const hasAnyResolvable = matched.length > 0
+      || uploadRows.some(r => r.matchStatus === 'multiple' || (r.matchStatus === 'unmatched' && r.suggestions?.length > 0));
 
     // Suggest a default invoice title from the event name
     let defaultTitle = '';
@@ -512,26 +515,32 @@ async function renderUploadStep(step) {
       <div class="card">
         <h3 style="font-size:0.9rem;font-weight:700;margin-bottom:0.5rem">Ergebnis: ${uploadRows.length} Zeilen</h3>
         <div style="display:flex;gap:1rem;margin-bottom:1rem;font-size:0.82rem">
-          <span style="color:#16a34a">✅ ${matched.length} zugeordnet</span>
-          <span style="color:#dc2626">❌ ${uploadRows.filter(r=>r.matchStatus==='unmatched').length} kein Treffer</span>
-          <span style="color:#b45309">⚠️ ${uploadRows.filter(r=>r.matchStatus==='multiple').length} mehrere Treffer</span>
+          <span id="stat-matched" style="color:#16a34a">✅ ${matched.length} zugeordnet</span>
+          <span id="stat-unmatched" style="color:#dc2626">❌ ${uploadRows.filter(r=>r.matchStatus==='unmatched').length} kein Treffer</span>
+          <span id="stat-multiple" style="color:#b45309">⚠️ ${uploadRows.filter(r=>r.matchStatus==='multiple').length} mehrere Treffer</span>
         </div>
 
         <div style="max-height:280px;overflow-y:auto;margin-bottom:1.25rem;border:1px solid var(--border);border-radius:8px;padding:0.5rem">
           ${uploadRows.map((r, i) => `
-            <div class="match-row">
+            <div class="match-row" id="match-row-${i}">
               <div class="match-name">
                 ${esc(r.name || '—')}
                 ${r.itemTitle ? `<span style="font-size:0.75rem;color:var(--text-secondary);margin-left:0.4rem">${esc(r.itemTitle)}</span>` : ''}
               </div>
-              <span class="badge badge-${r.matchStatus}">${
+              <span class="badge badge-${r.matchStatus} match-badge">${
                 r.matchStatus === 'matched' ? '✅ ' + esc(r.memberName || '') :
                 r.matchStatus === 'multiple' ? '⚠️ mehrere' : '❌ kein Treffer'
               }</span>
               ${r.matchStatus === 'multiple' ? `
-                <select class="form-input" style="max-width:200px;padding:0.3rem 0.5rem;font-size:0.78rem" onchange="uploadRows[${i}].memberId=this.value;uploadRows[${i}].memberName=this.options[this.selectedIndex].text.split(' — ')[0];uploadRows[${i}].matchStatus=this.value?'matched':'multiple'">
+                <select class="form-input" style="max-width:200px;padding:0.3rem 0.5rem;font-size:0.78rem" onchange="pickMatch(${i},this,'multiple')">
                   <option value="">— wählen —</option>
                   ${(r.matches||[]).map(m => `<option value="${m.id}">${esc(m.displayName)} — ${esc(m.email||'')}</option>`).join('')}
+                </select>
+              ` : ''}
+              ${r.matchStatus === 'unmatched' && r.suggestions?.length > 0 ? `
+                <select class="form-input" style="max-width:200px;padding:0.3rem 0.5rem;font-size:0.78rem" onchange="pickMatch(${i},this,'unmatched')">
+                  <option value="">— ggf. zuordnen —</option>
+                  ${(r.suggestions||[]).map(m => `<option value="${m.id}">${esc(m.displayName)} — ${esc(m.email||'')}</option>`).join('')}
                 </select>
               ` : ''}
               ${r.customAmount != null ? `<span style="font-size:0.75rem;font-weight:600;color:var(--accent)">CHF ${r.customAmount.toFixed(2)}</span>` : ''}
@@ -539,7 +548,7 @@ async function renderUploadStep(step) {
           `).join('')}
         </div>
 
-        ${matched.length > 0 ? `
+        ${hasAnyResolvable ? `
           <div style="border-top:1px solid var(--border);padding-top:1.25rem;margin-bottom:1rem">
             <h3 style="font-size:0.9rem;font-weight:700;margin-bottom:0.75rem">Rechnungsdetails</h3>
 
@@ -571,7 +580,7 @@ async function renderUploadStep(step) {
 
         <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
           <button class="btn" onclick="renderUploadStep(2)">← Zurück</button>
-          ${matched.length > 0 ? `<button class="btn btn-primary" id="btn-create-invoices">🧾 ${matched.length} Rechnung(en) erstellen</button>` : ''}
+          ${hasAnyResolvable ? `<button class="btn btn-primary" id="btn-create-invoices">🧾 ${matched.length} Rechnung(en) erstellen</button>` : ''}
         </div>
       </div>
     `;
@@ -963,6 +972,49 @@ async function loadSettings() {
   } catch (e) {
     el.innerHTML = `<div class="empty-state"><h3>Fehler</h3><p>${e.message}</p></div>`;
   }
+}
+
+// ---- Upload match resolution ----
+
+/**
+ * Called when user picks from a "multiple" or "unmatched with suggestions" dropdown.
+ * Updates uploadRows and refreshes the stat counts + button text.
+ */
+function pickMatch(i, sel, originalStatus) {
+  if (sel.value) {
+    uploadRows[i].memberId = sel.value;
+    uploadRows[i].memberName = sel.options[sel.selectedIndex].text.split(' — ')[0];
+    uploadRows[i].matchStatus = 'matched';
+    const badge = document.querySelector(`#match-row-${i} .match-badge`);
+    if (badge) {
+      badge.className = 'badge badge-matched match-badge';
+      badge.textContent = '✅ ' + uploadRows[i].memberName;
+    }
+  } else {
+    uploadRows[i].memberId = null;
+    uploadRows[i].memberName = null;
+    uploadRows[i].matchStatus = originalStatus;
+    const badge = document.querySelector(`#match-row-${i} .match-badge`);
+    if (badge) {
+      badge.className = `badge badge-${originalStatus} match-badge`;
+      badge.textContent = originalStatus === 'multiple' ? '⚠️ mehrere' : '❌ kein Treffer';
+    }
+  }
+  updateMatchCounts();
+}
+
+function updateMatchCounts() {
+  const matchedCount   = uploadRows.filter(r => r.matchStatus === 'matched').length;
+  const unmatchedCount = uploadRows.filter(r => r.matchStatus === 'unmatched').length;
+  const multipleCount  = uploadRows.filter(r => r.matchStatus === 'multiple').length;
+  const sm = document.getElementById('stat-matched');
+  const su = document.getElementById('stat-unmatched');
+  const sp = document.getElementById('stat-multiple');
+  if (sm) sm.textContent = `✅ ${matchedCount} zugeordnet`;
+  if (su) su.textContent = `❌ ${unmatchedCount} kein Treffer`;
+  if (sp) sp.textContent = `⚠️ ${multipleCount} mehrere Treffer`;
+  const btn = document.getElementById('btn-create-invoices');
+  if (btn) btn.textContent = `🧾 ${matchedCount} Rechnung(en) erstellen`;
 }
 
 // ---- Helpers ----
