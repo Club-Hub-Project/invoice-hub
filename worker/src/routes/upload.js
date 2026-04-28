@@ -132,42 +132,32 @@ export async function handleUpload(path, method, request, env) {
         return { raw: row, name: '', email: '', matchStatus: 'unmatched', matches: [] };
       }
 
-      // Search by name first, then email if needed
-      let matches = [];
+      // searchMembers returns: exact Vorname+Name hits AND Name-only fallback
+      // candidates in a single call. We split them here.
+      let found = [];
       try {
-        if (name) {
-          matches = await searchMembers(env, name);
-        }
-        if (matches.length === 0 && email) {
-          matches = await searchMembers(env, email);
-        }
+        if (name) found = await searchMembers(env, name);
+        if (!found.length && email) found = await searchMembers(env, email);
       } catch { /* connector unavailable */ }
 
-      const matchStatus = matches.length === 0 ? 'unmatched'
-        : matches.length === 1 ? 'matched'
+      // A result is an "exact match" when EVERY query word appears in the
+      // member's display name — this tolerates compound first names like
+      // "Elena Sophie" matching the CSV query "Elena Wenger" (both "elena"
+      // and "wenger" are present in "Elena Sophie Wenger").
+      const queryParts = (name || email).toLowerCase().split(/\s+/).filter(Boolean);
+      const exactMatches = found.filter(m => {
+        const t = (m.displayName || '').toLowerCase();
+        return queryParts.every(p => t.includes(p));
+      });
+      // Everything else becomes a candidate shown in the suggestion dropdown
+      const exactIds = new Set(exactMatches.map(m => m.id));
+      const candidateMatches = found.filter(m => !exactIds.has(m.id));
+
+      const matchStatus = exactMatches.length === 0 ? 'unmatched'
+        : exactMatches.length === 1 ? 'matched'
         : 'multiple';
 
-      const selectedMember = matches.length === 1 ? matches[0] : null;
-
-      // If unmatched, try each word of the name individually to build suggestions
-      let suggestions = [];
-      if (matchStatus === 'unmatched' && name) {
-        const seen = new Set();
-        const parts = name.trim().split(/\s+/).filter(p => p.length >= 2);
-        for (const part of parts) {
-          try {
-            const partial = await searchMembers(env, part);
-            for (const m of partial) {
-              if (!seen.has(m.id)) {
-                seen.add(m.id);
-                suggestions.push(m);
-              }
-            }
-          } catch { /* ignore */ }
-          if (suggestions.length >= 5) break;
-        }
-        suggestions = suggestions.slice(0, 5);
-      }
+      const selectedMember = exactMatches.length === 1 ? exactMatches[0] : null;
 
       return {
         raw: row,
@@ -176,8 +166,8 @@ export async function handleUpload(path, method, request, env) {
         customAmount,
         itemTitle,
         matchStatus,
-        matches: matches.slice(0, 5), // cap at 5 candidates
-        suggestions,
+        matches: exactMatches.slice(0, 5),       // used by 'multiple' dropdown
+        suggestions: candidateMatches.slice(0, 5), // used by 'unmatched' dropdown
         memberId: selectedMember?.id || null,
         memberName: selectedMember?.displayName || null,
         memberEmail: selectedMember?.email || null,

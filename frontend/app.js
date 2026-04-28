@@ -543,6 +543,9 @@ async function renderUploadStep(step) {
                   ${(r.suggestions||[]).map(m => `<option value="${m.id}">${esc(m.displayName)} — ${esc(m.email||'')}</option>`).join('')}
                 </select>
               ` : ''}
+              ${r.matchStatus === 'unmatched' && !r.suggestions?.length ? `
+                <button class="btn btn-sm btn-set-external" style="font-size:0.75rem;padding:0.2rem 0.6rem;color:#92400e;border-color:#d97706" onclick="setExternal(${i})">🏷 Extern</button>
+              ` : ''}
               ${r.customAmount != null ? `<span style="font-size:0.75rem;font-weight:600;color:var(--accent)">CHF ${r.customAmount.toFixed(2)}</span>` : ''}
             </div>
           `).join('')}
@@ -742,10 +745,13 @@ function renderInvoiceList(el) {
                 <td style="font-size:0.82rem">${esc(inv.eventName||'—')}</td>
                 <td>CHF ${(inv.amount||0).toFixed(2)}</td>
                 <td style="font-size:0.82rem">${inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString('de-CH') : '—'}</td>
-                <td><span class="badge badge-${inv.status}">${inv.status === 'committed' ? '✅ Gebucht' : '📝 Entwurf'}</span></td>
+                <td>${inv.isExternal
+                  ? `<span class="badge" style="background:#fef3c7;color:#92400e">🏷 Extern</span>`
+                  : `<span class="badge badge-${inv.status}">${inv.status === 'committed' ? '✅ Gebucht' : '📝 Entwurf'}</span>`
+                }</td>
                 <td>
                   <div class="row-actions">
-                    ${inv.status === 'draft' ? `<button class="btn btn-sm btn-commit-inv" data-id="${inv.id}" title="In Webling buchen">✅</button>` : ''}
+                    ${inv.status === 'draft' && !inv.isExternal ? `<button class="btn btn-sm btn-commit-inv" data-id="${inv.id}" title="In Webling buchen">✅</button>` : ''}
                     <button class="btn btn-sm btn-email-inv" data-id="${inv.id}" title="E-Mail-Vorlage">📧</button>
                     ${inv.status === 'draft' ? `<button class="btn btn-sm btn-delete-inv" data-id="${inv.id}" title="Löschen" style="color:#dc2626">🗑</button>` : ''}
                   </div>
@@ -999,6 +1005,22 @@ function pickMatch(i, sel, originalStatus) {
       badge.className = `badge badge-${originalStatus} match-badge`;
       badge.textContent = originalStatus === 'multiple' ? '⚠️ mehrere' : '❌ kein Treffer';
     }
+  }
+  updateMatchCounts();
+}
+
+/** Mark a row as an external participant (no Webling member). */
+function setExternal(i) {
+  uploadRows[i].memberId = '__external__';
+  uploadRows[i].memberName = uploadRows[i].name; // use CSV name
+  uploadRows[i].isExternal = true;
+  uploadRows[i].matchStatus = 'matched';
+  const row = document.getElementById(`match-row-${i}`);
+  if (row) {
+    const badge = row.querySelector('.match-badge');
+    if (badge) { badge.className = 'badge match-badge'; badge.style.background='#fef3c7'; badge.style.color='#92400e'; badge.textContent = '🏷 Extern'; }
+    const btn = row.querySelector('.btn-set-external');
+    if (btn) btn.remove();
   }
   updateMatchCounts();
 }

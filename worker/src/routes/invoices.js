@@ -153,14 +153,16 @@ export async function handleInvoices(path, method, request, env) {
 
     const created = [];
     for (const row of body.rows) {
-      if (!row.memberId) continue; // skip unmatched
+      const isExternal = row.isExternal === true || row.memberId === '__external__';
+      if (!row.memberId && !isExternal) continue; // skip truly unmatched
       const id = generateId();
       const amount = row.customAmount ?? event.fee;
       const invoice = {
         id,
         eventId: event.id,
         eventName: event.name,
-        memberId: String(row.memberId),
+        memberId: isExternal ? null : String(row.memberId),
+        isExternal,
         memberName: row.memberName || '',
         memberEmail: row.memberEmail || '',
         amount,
@@ -313,6 +315,10 @@ async function commitInvoice(env, id, returnObject = false) {
   if (!invoice) {
     if (returnObject) return { error: `Invoice ${id} not found` };
     return ok_({ error: 'Invoice not found' });
+  }
+  if (invoice.isExternal) {
+    if (returnObject) return { error: 'Externe Rechnungen können nicht in Webling gebucht werden' };
+    return ok_({ error: 'Externe Rechnungen können nicht in Webling gebucht werden' });
   }
   if (invoice.status === 'committed') {
     if (returnObject) return { error: 'Already committed', weblingDebitorId: invoice.weblingDebitorId };
