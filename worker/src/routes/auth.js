@@ -20,7 +20,7 @@ export async function handleAuth(path, method, request, env) {
     if (!env.AUTH_SERVICE) return err(503, 'Auth service not configured');
     try {
       const body = await request.text();
-      const res = await env.AUTH_SERVICE.fetch(new Request('https://auth/auth/request-code', {
+      const res = await env.AUTH_SERVICE.fetch(new Request('https://auth/request-code', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body,
       }));
       return new Response(res.body, { status: res.status, headers: { 'Content-Type': 'application/json' } });
@@ -33,7 +33,7 @@ export async function handleAuth(path, method, request, env) {
     if (!env.AUTH_SERVICE) return err(503, 'Auth service not configured');
     try {
       const body = await request.text();
-      const res = await env.AUTH_SERVICE.fetch(new Request('https://auth/auth/verify-code', {
+      const res = await env.AUTH_SERVICE.fetch(new Request('https://auth/verify-code', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body,
       }));
       if (!res.ok) return new Response(res.body, { status: res.status, headers: { 'Content-Type': 'application/json' } });

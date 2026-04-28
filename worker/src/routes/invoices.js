@@ -18,8 +18,32 @@ const KEY = {
 
 // ---- Email text generator ----
 
+/**
+ * Substitute placeholders in an email body template.
+ * Supported: [Name], [FirstName], [Article], [Amount], [DueDate], [InvoiceDate], [EventName], [Title]
+ */
+function applyTemplate(template, invoice) {
+  const firstName = (invoice.memberName || '').split(' ')[0] || '';
+  const dueDateStr = invoice.dueDate
+    ? new Date(invoice.dueDate).toLocaleDateString('de-CH') : '';
+  const invoiceDateStr = invoice.invoiceDate
+    ? new Date(invoice.invoiceDate).toLocaleDateString('de-CH') : '';
+  const amount = typeof invoice.amount === 'number'
+    ? `CHF ${invoice.amount.toFixed(2)}` : `CHF ${invoice.amount || '0.00'}`;
+
+  return template
+    .replace(/\[Name\]/g, invoice.memberName || '')
+    .replace(/\[FirstName\]/g, firstName)
+    .replace(/\[Article\]/g, invoice.itemTitle || '')
+    .replace(/\[Amount\]/g, amount)
+    .replace(/\[DueDate\]/g, dueDateStr)
+    .replace(/\[InvoiceDate\]/g, invoiceDateStr)
+    .replace(/\[EventName\]/g, invoice.eventName || '')
+    .replace(/\[Title\]/g, invoice.invoiceTitle || invoice.eventName || '');
+}
+
 function generateEmailText(invoice, settings) {
-  const firstName = (invoice.memberName || '').split(' ')[0] || invoice.memberName || 'Mitglied';
+  const firstName = (invoice.memberName || '').split(' ')[0] || 'Mitglied';
   const dueDateStr = invoice.dueDate
     ? new Date(invoice.dueDate).toLocaleDateString('de-CH')
     : '30 Tage nach Rechnungsdatum';
@@ -28,20 +52,34 @@ function generateEmailText(invoice, settings) {
     : new Date().toLocaleDateString('de-CH');
   const amount = typeof invoice.amount === 'number' ? invoice.amount.toFixed(2) : invoice.amount;
 
+  // If a custom template body was stored, use it (with subject prepended)
+  if (invoice.emailBodyTemplate) {
+    const subject = invoice.emailSubject
+      || `Rechnung - ${invoice.invoiceTitle || invoice.eventName || 'Veranstaltung'}`;
+    const body = applyTemplate(invoice.emailBodyTemplate, invoice);
+    return `Betreff: ${subject}\n\n${body}`;
+  }
+
+  // Auto-generated fallback
   const lines = [
-    `Betreff: Rechnung - ${invoice.eventName || 'Veranstaltung'}`,
+    `Betreff: ${invoice.emailSubject || `Rechnung - ${invoice.invoiceTitle || invoice.eventName || 'Veranstaltung'}`}`,
     '',
     `Liebe/r ${firstName},`,
     '',
-    `vielen Dank für deine Teilnahme an "${invoice.eventName || 'der Veranstaltung'}".`,
-    '',
-    `Anbei die Rechnung:`,
+    `anbei die Rechnung:`,
+  ];
+
+  if (invoice.itemTitle) {
+    lines.push(`  Artikel:             ${invoice.itemTitle}`);
+  }
+
+  lines.push(
     `  Betrag:              CHF ${amount}`,
     `  Rechnungsdatum:      ${invoiceDateStr}`,
     `  Zahlbar bis:         ${dueDateStr}`,
-    `  Verwendungszweck:    ${invoice.title || invoice.eventName} - ${invoice.memberName}`,
+    `  Verwendungszweck:    ${invoice.invoiceTitle || invoice.eventName} - ${invoice.memberName}`,
     '',
-  ];
+  );
 
   if (settings.bankDetails) {
     lines.push('Bankverbindung:');
@@ -93,7 +131,7 @@ export async function handleInvoices(path, method, request, env) {
   // POST /api/invoices — create one or more drafts from upload results
   if (path === '/api/invoices' && method === 'POST') {
     const body = await request.json();
-    // body: { eventId, rows: [{ memberId, memberName, memberEmail, customAmount }], overrides? }
+    // body: { eventId, rows, invoiceTitle, emailSubject, emailBodyTemplate }
     if (!body.eventId) return err(400, 'eventId is required');
     if (!Array.isArray(body.rows) || !body.rows.length) return err(400, 'rows is required');
 
@@ -108,6 +146,11 @@ export async function handleInvoices(path, method, request, env) {
       return d.toISOString().split('T')[0];
     })();
 
+    // Batch-level fields (shared across all invoices in this upload)
+    const invoiceTitle = body.invoiceTitle || body.title || settings.defaultInvoiceTitle || event.name;
+    const emailSubject = body.emailSubject || '';
+    const emailBodyTemplate = body.emailBodyTemplate || '';
+
     const created = [];
     for (const row of body.rows) {
       if (!row.memberId) continue; // skip unmatched
@@ -121,7 +164,10 @@ export async function handleInvoices(path, method, request, env) {
         memberName: row.memberName || '',
         memberEmail: row.memberEmail || '',
         amount,
-        title: body.title || settings.defaultInvoiceTitle || `${event.name}`,
+        invoiceTitle,           // debitor entry title (e.g. "Gürtelprüfung Februar 2026")
+        itemTitle: row.itemTitle || '', // line-item / article (e.g. "Gürtelprüfung Blaugurt")
+        emailSubject,
+        emailBodyTemplate,
         invoiceDate: today,
         dueDate,
         status: 'draft',
@@ -281,7 +327,8 @@ async function commitInvoice(env, id, returnObject = false) {
   const { id: weblingDebitorId } = await adapter.createInvoice({
     memberId: invoice.memberId,
     periodId: invoice.periodId,
-    title: invoice.title,
+    title: invoice.invoiceTitle || invoice.eventName,   // debitor entry title
+    itemTitle: invoice.itemTitle || invoice.invoiceTitle || invoice.eventName, // line-item
     date: invoice.invoiceDate,
     dueDate: invoice.dueDate,
     amount: invoice.amount,

@@ -401,6 +401,7 @@ document.getElementById('form-event').addEventListener('submit', async (e) => {
 
 let selectedEventId = null;
 let uploadRows = [];
+let uploadStats = {};
 let uploadStep = 1;
 
 function loadUpload() {
@@ -496,7 +497,16 @@ async function renderUploadStep(step) {
 
   else if (step === 3) {
     const matched = uploadRows.filter(r => r.matchStatus === 'matched');
-    const unmatched = uploadRows.filter(r => r.matchStatus !== 'matched');
+    const hasAmountCol = uploadStats.hasAmountColumn;
+    const hasArticleCol = uploadStats.hasArticleColumn;
+
+    // Suggest a default invoice title from the event name
+    let defaultTitle = '';
+    try {
+      const evData = await GET('/api/events');
+      const ev = (evData.events || []).find(e => e.id === selectedEventId);
+      if (ev) defaultTitle = ev.name;
+    } catch { /* fine */ }
 
     content.innerHTML = `
       <div class="card">
@@ -507,10 +517,13 @@ async function renderUploadStep(step) {
           <span style="color:#b45309">⚠️ ${uploadRows.filter(r=>r.matchStatus==='multiple').length} mehrere Treffer</span>
         </div>
 
-        <div style="max-height:350px;overflow-y:auto;margin-bottom:1rem">
+        <div style="max-height:280px;overflow-y:auto;margin-bottom:1.25rem;border:1px solid var(--border);border-radius:8px;padding:0.5rem">
           ${uploadRows.map((r, i) => `
             <div class="match-row">
-              <div class="match-name">${esc(r.name || '—')}</div>
+              <div class="match-name">
+                ${esc(r.name || '—')}
+                ${r.itemTitle ? `<span style="font-size:0.75rem;color:var(--text-secondary);margin-left:0.4rem">${esc(r.itemTitle)}</span>` : ''}
+              </div>
               <span class="badge badge-${r.matchStatus}">${
                 r.matchStatus === 'matched' ? '✅ ' + esc(r.memberName || '') :
                 r.matchStatus === 'multiple' ? '⚠️ mehrere' : '❌ kein Treffer'
@@ -521,12 +534,40 @@ async function renderUploadStep(step) {
                   ${(r.matches||[]).map(m => `<option value="${m.id}">${esc(m.displayName)} — ${esc(m.email||'')}</option>`).join('')}
                 </select>
               ` : ''}
-              ${r.customAmount != null ? `<span style="font-size:0.78rem;color:var(--text-secondary)">CHF ${r.customAmount}</span>` : ''}
+              ${r.customAmount != null ? `<span style="font-size:0.75rem;font-weight:600;color:var(--accent)">CHF ${r.customAmount.toFixed(2)}</span>` : ''}
             </div>
           `).join('')}
         </div>
 
-        ${matched.length === 0 ? `<p style="color:#dc2626;font-size:0.875rem">Keine Mitglieder konnten zugeordnet werden. Bitte CSV prüfen.</p>` : ''}
+        ${matched.length > 0 ? `
+          <div style="border-top:1px solid var(--border);padding-top:1.25rem;margin-bottom:1rem">
+            <h3 style="font-size:0.9rem;font-weight:700;margin-bottom:0.75rem">Rechnungsdetails</h3>
+
+            <div class="form-group">
+              <label class="form-label">Rechnungstitel *
+                <span style="font-weight:400;color:var(--text-secondary)">(erscheint in Webling)</span>
+              </label>
+              <input class="form-input" type="text" id="upload-inv-title" value="${esc(defaultTitle)}" placeholder="z.B. Gürtelprüfung Februar 2026" style="max-width:480px">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">E-Mail Betreff</label>
+              <input class="form-input" type="text" id="upload-email-subject" placeholder="Rechnung ${esc(defaultTitle)}" style="max-width:480px">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">E-Mail Text
+                <span style="font-weight:400;color:var(--text-secondary);font-size:0.75rem">
+                  Platzhalter: [FirstName], [Name]${hasArticleCol ? ', [Article]' : ''}, [Amount], [DueDate], [Title]
+                </span>
+              </label>
+              <textarea class="form-input" id="upload-email-body" rows="7" placeholder="Liebe/r [FirstName],&#10;&#10;anbei die Rechnung für [Title].&#10;${hasArticleCol ? '&#10;Artikel: [Article]' : ''}&#10;Betrag: [Amount]&#10;Zahlbar bis: [DueDate]&#10;&#10;Freundliche Grüsse&#10;Taekwondo Bern"></textarea>
+            </div>
+
+            ${hasAmountCol ? `<p style="font-size:0.8rem;color:var(--accent);margin-bottom:0.75rem">💡 Individuelle Beträge aus der CSV-Spalte "Betrag" werden verwendet.</p>` : ''}
+            ${hasArticleCol ? `<p style="font-size:0.8rem;color:var(--accent);margin-bottom:0.75rem">💡 Artikel aus der CSV-Spalte werden als Rechnungsposition und als [Article]-Platzhalter verwendet.</p>` : ''}
+          </div>
+        ` : `<p style="color:#dc2626;font-size:0.875rem">Keine Mitglieder konnten zugeordnet werden. Bitte CSV prüfen.</p>`}
 
         <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
           <button class="btn" onclick="renderUploadStep(2)">← Zurück</button>
@@ -564,6 +605,7 @@ async function processCSVFile(file) {
 
     const data = await res.json();
     uploadRows = data.rows || [];
+    uploadStats = data.stats || {};
     renderUploadStep(3);
   } catch (e) {
     errEl.textContent = e.message;
@@ -579,15 +621,32 @@ async function processCSVFile(file) {
 
 async function createInvoicesFromUpload() {
   const btn = document.getElementById('btn-create-invoices');
+  const invoiceTitle = document.getElementById('upload-inv-title')?.value.trim() || '';
+  const emailSubject = document.getElementById('upload-email-subject')?.value.trim() || '';
+  const emailBodyTemplate = document.getElementById('upload-email-body')?.value.trim() || '';
+
+  if (!invoiceTitle) {
+    toast('Bitte Rechnungstitel eingeben', 'error');
+    document.getElementById('upload-inv-title')?.focus();
+    return;
+  }
+
   btn.disabled = true;
   btn.textContent = 'Wird erstellt...';
 
   const rows = uploadRows.filter(r => r.matchStatus === 'matched' && r.memberId);
 
   try {
-    const data = await POST('/api/invoices', { eventId: selectedEventId, rows });
+    const data = await POST('/api/invoices', {
+      eventId: selectedEventId,
+      rows,
+      invoiceTitle,
+      emailSubject,
+      emailBodyTemplate,
+    });
     toast(`${data.created} Rechnung(en) erstellt`, 'success');
     uploadRows = [];
+    uploadStats = {};
     viewsLoaded['invoices'] = false;
     viewsLoaded['dashboard'] = false;
     navigate('invoices');

@@ -84,10 +84,16 @@ function extractEmail(row) {
 
 function extractAmount(row) {
   const keys = Object.keys(row);
-  const key = keys.find(k => /betrag|amount|fee|preis|price/i.test(k));
+  const key = keys.find(k => /^(betrag|amount|fee|preis|price)$/i.test(k));
   if (!key) return null;
-  const v = parseFloat((row[key] || '').replace(/[^0-9.]/g, ''));
+  const v = parseFloat((row[key] || '').replace(/[^0-9.,]/g, '').replace(',', '.'));
   return isNaN(v) ? null : v;
+}
+
+function extractArticle(row) {
+  const keys = Object.keys(row);
+  const key = keys.find(k => /^(artikel|article|position|leistung|beschreibung|description|item)$/i.test(k));
+  return key ? row[key].trim() : '';
 }
 
 export async function handleUpload(path, method, request, env) {
@@ -111,11 +117,16 @@ export async function handleUpload(path, method, request, env) {
     const rows = parseCSV(csvText);
     if (!rows.length) return ok({ error: 'No data rows found in CSV' }, 400);
 
+    // Detect whether any row has a per-row amount (drives UI hint)
+    const hasAmountColumn = rows.some(r => extractAmount(r) !== null);
+    const hasArticleColumn = rows.some(r => extractArticle(r) !== '');
+
     // Match each row to a Webling member
     const results = await Promise.all(rows.map(async (row) => {
       const name = extractName(row);
       const email = extractEmail(row);
       const customAmount = extractAmount(row);
+      const itemTitle = extractArticle(row);
 
       if (!name && !email) {
         return { raw: row, name: '', email: '', matchStatus: 'unmatched', matches: [] };
@@ -143,6 +154,7 @@ export async function handleUpload(path, method, request, env) {
         name: name || email,
         email,
         customAmount,
+        itemTitle,
         matchStatus,
         matches: matches.slice(0, 5), // cap at 5 candidates
         memberId: selectedMember?.id || null,
@@ -156,6 +168,8 @@ export async function handleUpload(path, method, request, env) {
       matched: results.filter(r => r.matchStatus === 'matched').length,
       multiple: results.filter(r => r.matchStatus === 'multiple').length,
       unmatched: results.filter(r => r.matchStatus === 'unmatched').length,
+      hasAmountColumn,
+      hasArticleColumn,
     };
 
     return ok({ rows: results, stats });
